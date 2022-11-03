@@ -246,7 +246,7 @@ resource "aws_launch_template" "this" {
   # require permissions on create/destroy that depend on nodes
   depends_on = [
     aws_security_group_rule.this,
-    aws_iam_role_policy_attachment.this,
+    aws_iam_role.this,
   ]
 
   tags = var.tags
@@ -536,18 +536,13 @@ resource "aws_iam_role" "this" {
   permissions_boundary  = var.iam_role_permissions_boundary
   force_detach_policies = true
 
-  tags = merge(var.tags, var.iam_role_tags)
-}
-
-resource "aws_iam_role_policy_attachment" "this" {
-  for_each = var.create && var.create_iam_instance_profile ? toset(compact(distinct(concat([
+  managed_policy_arns = compact(distinct(concat([
     "${local.iam_role_policy_prefix}/AmazonEKSWorkerNodePolicy",
     "${local.iam_role_policy_prefix}/AmazonEC2ContainerRegistryReadOnly",
     var.iam_role_attach_cni_policy ? local.cni_policy : "",
-  ], var.iam_role_additional_policies)))) : toset([])
+    ], var.iam_role_additional_policies)))
 
-  policy_arn = each.value
-  role       = aws_iam_role.this[0].name
+  tags = merge(var.tags, var.iam_role_tags)
 }
 
 # Only self-managed node group requires instance profile

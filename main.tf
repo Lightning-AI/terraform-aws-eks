@@ -56,26 +56,26 @@ resource "aws_eks_cluster" "this" {
   }
 
   depends_on = [
-    aws_iam_role_policy_attachment.this,
+    aws_iam_role.this,
     aws_security_group_rule.cluster,
     aws_security_group_rule.node,
     aws_cloudwatch_log_group.this
   ]
 }
 
-resource "aws_ec2_tag" "cluster_primary_security_group" {
-  # This should not affect the name of the cluster primary security group
-  # Ref: https://github.com/terraform-aws-modules/terraform-aws-eks/pull/2006
-  # Ref: https://github.com/terraform-aws-modules/terraform-aws-eks/pull/2008
-  # `aws_default_tags` is merged in to "dedupe" tags and stabilize tag updates
-  for_each = { for k, v in merge(var.tags, var.cluster_tags, data.aws_default_tags.current.tags) :
-    k => v if local.create && k != "Name" && var.create_cluster_primary_security_group_tags
-  }
-
-  resource_id = aws_eks_cluster.this[0].vpc_config[0].cluster_security_group_id
-  key         = each.key
-  value       = each.value
-}
+#resource "aws_ec2_tag" "cluster_primary_security_group" {
+#  # This should not affect the name of the cluster primary security group
+#  # Ref: https://github.com/terraform-aws-modules/terraform-aws-eks/pull/2006
+#  # Ref: https://github.com/terraform-aws-modules/terraform-aws-eks/pull/2008
+#  # `aws_default_tags` is merged in to "dedupe" tags and stabilize tag updates
+#  for_each = { for k, v in merge(var.tags, var.cluster_tags, data.aws_default_tags.current.tags) :
+#    k => v if local.create && k != "Name" && var.create_cluster_primary_security_group_tags
+#  }
+#
+#  resource_id = aws_eks_cluster.this[0].vpc_config[0].cluster_security_group_id
+#  key         = each.key
+#  value       = each.value
+#}
 
 resource "aws_cloudwatch_log_group" "this" {
   count = local.create && var.create_cloudwatch_log_group ? 1 : 0
@@ -287,18 +287,12 @@ resource "aws_iam_role" "this" {
     }
   }
 
+  managed_policy_arns = compact(distinct(concat([
+      "${local.policy_arn_prefix}/AmazonEKSClusterPolicy",
+      "${local.policy_arn_prefix}/AmazonEKSVPCResourceController",
+  ], var.iam_role_additional_policies)))
+
   tags = merge(var.tags, var.iam_role_tags)
-}
-
-# Policies attached ref https://docs.aws.amazon.com/eks/latest/userguide/service_IAM_role.html
-resource "aws_iam_role_policy_attachment" "this" {
-  for_each = local.create_iam_role ? toset(compact(distinct(concat([
-    "${local.policy_arn_prefix}/AmazonEKSClusterPolicy",
-    "${local.policy_arn_prefix}/AmazonEKSVPCResourceController",
-  ], var.iam_role_additional_policies)))) : toset([])
-
-  policy_arn = each.value
-  role       = aws_iam_role.this[0].name
 }
 
 # Using separate attachment due to `The "for_each" value depends on resource attributes that cannot be determined until apply`
